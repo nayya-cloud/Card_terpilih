@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -213,21 +214,32 @@ h1{font-size:clamp(29px,3.2vw,46px);line-height:1.15;letter-spacing:-1.3px;margi
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
   const toLocalInput = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  // WAKTU REAL-TIME MENGIKUTI PERANGKAT
   const dateDisplay = value => {
-    if (!value) return '—';
-    const d = new Date(value);
+    const d = value ? new Date(value) : new Date();
     if (Number.isNaN(d.getTime())) return '—';
-    return `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    return new Intl.DateTimeFormat('id-ID', {
+      day:'2-digit',
+      month:'2-digit',
+      year:'numeric',
+      hour:'2-digit',
+      minute:'2-digit',
+      second:'2-digit',
+      hour12:false
+    }).format(d).replace(/\./g, ':');
   };
+
   const normalizePhone = value => {
     let digits = String(value || '').replace(/\D/g,'');
     if (digits.startsWith('0')) digits = '62' + digits.slice(1);
     return digits;
   };
+
   const parseAmount = value => {
     let s = String(value ?? '').trim().replace(/\s/g,'');
     if (!s) return 0;
-    // Input bertitik/koma dianggap format Indonesia; ambil angka dan dua desimal bila ada.
     if (s.includes(',') && /\d,\d{1,2}$/.test(s)) {
       s = s.replace(/\./g,'').replace(',','.');
       const n = Number(s); return Number.isFinite(n) ? n : 0;
@@ -235,25 +247,36 @@ h1{font-size:clamp(29px,3.2vw,46px);line-height:1.15;letter-spacing:-1.3px;margi
     s = s.replace(/[^\d-]/g,'');
     const n = Number(s); return Number.isFinite(n) ? n : 0;
   };
+
   const formatAmount = value => new Intl.NumberFormat('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value)||0);
   const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
   const makeSeed = () => [
     {id:1,phone:'628135****2525',name:'-',work:'Belum Selesai',claim:'Sudah Klaim',amount:2500000,wd:'Berhasil',wdDate:'2026-11-13T18:45:00'},
     {id:2,phone:'6285342231719',name:'Pelanggan 02',work:'Belum Selesai',claim:'Menunggu Registrasi',amount:1899766,wd:'Menunggu',wdDate:''},
     {id:3,phone:'628579****7731',name:'Pelanggan 03',work:'Belum Selesai',claim:'Sudah Klaim',amount:100000,wd:'Menunggu',wdDate:''}
   ];
+
   let members;
   try { members = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e) { members = null; }
   if (!Array.isArray(members)) { members = makeSeed(); }
-  members.forEach(m => { if (!m.recordDate) m.recordDate = m.wdDate || new Date().toISOString(); });
+
+  members.forEach(m => {
+    if (!m.recordDate) m.recordDate = new Date().toISOString();
+  });
+
   save();
-  function save(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(members)); }
+
+  function save(){
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(members));
+  }
 
   const list = document.getElementById('memberList');
   const search = document.getElementById('searchInput');
   const tabs = [...document.querySelectorAll('.tab')];
   const backdrop = document.getElementById('modalBackdrop');
   const form = document.getElementById('editForm');
+
   let activeFilter = 'all';
   let editingId = null;
   let toastTimer;
@@ -263,29 +286,47 @@ h1{font-size:clamp(29px,3.2vw,46px);line-height:1.15;letter-spacing:-1.3px;margi
     calendar:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>',
     check:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4.5 12.5 5 5L20 7"/></svg>'
   };
+
   function showToast(message){
-    const el=document.getElementById('toast');el.textContent=message;el.classList.add('show');
-    clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2300);
+    const el=document.getElementById('toast');
+    el.textContent=message;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>el.classList.remove('show'),2300);
   }
+
   function statusIcon(success){
     return success
       ? `<span class="check-circle" aria-label="Berhasil">${icons.check}</span>`
       : '<span class="wait-circle" aria-label="Menunggu"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg></span>';
   }
+
   function render(){
     document.getElementById('count-all').textContent=members.length;
     document.getElementById('count-done').textContent=members.filter(m=>m.work==='Terpilih').length;
     document.getElementById('count-pending').textContent=members.filter(m=>m.work!=='Terpilih').length;
+
     const q=search.value.trim().toLowerCase();
+
     const filtered=members.filter(m=>{
       const filterOK=activeFilter==='all'||(activeFilter==='done'?m.work==='Terpilih':m.work!=='Terpilih');
       return filterOK&&(!q||`${m.phone} ${m.name}`.toLowerCase().includes(q));
     });
-    if(!filtered.length){list.innerHTML='<div class="empty">Tidak ada data yang cocok.</div>';return;}
+
+    if(!filtered.length){
+      list.innerHTML='<div class="empty">Tidak ada data yang cocok.</div>';
+      return;
+    }
+
     list.innerHTML=filtered.slice(0,1).map(m=>{
       const claimClass=m.claim==='Sudah Klaim'?'':'claim-wait';
       const wdClass=m.wd==='Berhasil'?'':'waiting';
-      const date=dateDisplay(m.wdDate || m.recordDate);
+
+      // WD berhasil memakai waktu tetap; selain itu jam selalu mengikuti HP.
+      const date=m.wd==='Berhasil' && m.wdDate
+        ? dateDisplay(m.wdDate)
+        : dateDisplay(new Date());
+
       return `<article class="member-card" data-id="${m.id}">
         <div class="member-left">
           <div class="member-index">#${members.indexOf(m)+1}</div>
@@ -314,8 +355,11 @@ h1{font-size:clamp(29px,3.2vw,46px);line-height:1.15;letter-spacing:-1.3px;margi
       </article>`;
     }).join('');
   }
+
   function openModal(id){
-    const m=members.find(x=>x.id===id);if(!m)return;
+    const m=members.find(x=>x.id===id);
+    if(!m)return;
+
     editingId=id;
     document.getElementById('editPhone').value=m.phone||'';
     document.getElementById('editName').value=m.name==='-'?'':(m.name||'');
@@ -323,57 +367,118 @@ h1{font-size:clamp(29px,3.2vw,46px);line-height:1.15;letter-spacing:-1.3px;margi
     document.getElementById('editClaim').value=m.claim||'Menunggu Registrasi';
     document.getElementById('editAmount').value=String(m.amount??0);
     document.getElementById('editWd').value=m.wd||'Menunggu';
-    document.getElementById('editDateDisplay').value=dateDisplay(m.wdDate || m.recordDate);
+    document.getElementById('editDateDisplay').value=dateDisplay(m.wdDate || m.recordDate || new Date());
+
     backdrop.classList.add('open');
     setTimeout(()=>document.getElementById('editPhone').focus(),40);
   }
-  function closeModal(){backdrop.classList.remove('open');editingId=null;}
+
+  function closeModal(){
+    backdrop.classList.remove('open');
+    editingId=null;
+  }
+
   list.addEventListener('click',e=>{
-    const target=e.target.closest('[data-edit]');if(target)openModal(Number(target.dataset.edit));
+    const target=e.target.closest('[data-edit]');
+    if(target)openModal(Number(target.dataset.edit));
   });
+
   tabs.forEach(tab=>tab.addEventListener('click',()=>{
-    activeFilter=tab.dataset.filter;tabs.forEach(t=>t.classList.toggle('active',t===tab));render();
+    activeFilter=tab.dataset.filter;
+    tabs.forEach(t=>t.classList.toggle('active',t===tab));
+    render();
   }));
+
   search.addEventListener('input',render);
+
   document.getElementById('revisitBtn').addEventListener('click',()=>{
-    search.value='';activeFilter='all';tabs.forEach(t=>t.classList.toggle('active',t.dataset.filter==='all'));render();showToast('Daftar diperbarui.');
+    search.value='';
+    activeFilter='all';
+    tabs.forEach(t=>t.classList.toggle('active',t.dataset.filter==='all'));
+    render();
+    showToast('Daftar diperbarui.');
   });
+
   document.getElementById('closeModal').addEventListener('click',closeModal);
   document.getElementById('cancelBtn').addEventListener('click',closeModal);
-  backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeModal();});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&backdrop.classList.contains('open'))closeModal();});
+
+  backdrop.addEventListener('click',e=>{
+    if(e.target===backdrop)closeModal();
+  });
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&backdrop.classList.contains('open'))closeModal();
+  });
+
   form.addEventListener('submit',e=>{
-    e.preventDefault();const m=members.find(x=>x.id===editingId);if(!m)return;
+    e.preventDefault();
+
+    const m=members.find(x=>x.id===editingId);
+    if(!m)return;
+
     const oldWd=m.wd;
+
     m.phone=normalizePhone(document.getElementById('editPhone').value);
     m.name=document.getElementById('editName').value.trim()||'-';
     m.work=document.getElementById('editWork').value;
     m.claim=document.getElementById('editClaim').value;
     m.amount=parseAmount(document.getElementById('editAmount').value);
     m.wd=document.getElementById('editWd').value;
+
     if(m.wd==='Berhasil'){
-      if(oldWd!=='Berhasil'||!m.wdDate){m.wdDate=new Date().toISOString();}
-    } else {m.wdDate='';}
-    save();closeModal();render();showToast('Data member berhasil disimpan.');
+      if(oldWd!=='Berhasil'||!m.wdDate){
+        m.wdDate=new Date().toISOString();
+      }
+    }else{
+      m.wdDate='';
+    }
+
+    save();
+    closeModal();
+    render();
+    showToast('Data member berhasil disimpan.');
   });
+
   document.getElementById('deleteBtn').addEventListener('click',()=>{
-    const m=members.find(x=>x.id===editingId);if(!m)return;
+    const m=members.find(x=>x.id===editingId);
+    if(!m)return;
+
     if(confirm(`Hapus data ${m.phone||'member ini'}? Data yang dihapus tidak dapat dikembalikan.`)){
-      members=members.filter(x=>x.id!==editingId);save();closeModal();render();showToast('Data berhasil dihapus.');
+      members=members.filter(x=>x.id!==editingId);
+      save();
+      closeModal();
+      render();
+      showToast('Data berhasil dihapus.');
     }
   });
 
-  // Timer contoh: hitung mundur 23:27:28 sejak halaman dibuka.
+  // Timer hitung mundur tetap dipertahankan.
   let remaining=23*3600+27*60+28;
+
   function tick(){
-    const h=Math.floor(remaining/3600),mi=Math.floor((remaining%3600)/60),s=remaining%60;
+    const h=Math.floor(remaining/3600);
+    const mi=Math.floor((remaining%3600)/60);
+    const s=remaining%60;
+
     document.getElementById('hours').textContent=pad(h);
     document.getElementById('minutes').textContent=pad(mi);
     document.getElementById('seconds').textContent=pad(s);
+
     if(remaining>0)remaining--;
   }
-  tick();setInterval(tick,1000);
+
+  tick();
+  setInterval(tick,1000);
+
+  // Memperbarui jam pada kartu setiap detik tanpa mengubah data lainnya.
   render();
+  setInterval(render,1000);
+
+  // Perbarui tampilan setelah pengguna kembali ke halaman.
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden)render();
+  });
+
 })();
 </script>
 </body>
